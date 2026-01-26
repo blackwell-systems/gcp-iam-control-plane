@@ -294,4 +294,4 @@ Maintained by **Dayna Blackwell** — founder of Blackwell Systems.
 
 - GitHub: [https://github.com/blackwell-systems](https://github.com/blackwell-systems)
 - Blog: [https://blog.blackwell-systems.com](https://blog.blackwell-systems.com)
-- LinkedIn: [https://linkedin.com/in/daynablackwell](https://linkedin.com/in/daynablackwell)
+- LinkedIn: [https://linkedin.com/in/dayna-blackwell](https://linkedin.com/in/dayna-blackwell)
