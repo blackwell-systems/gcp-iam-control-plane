@@ -42,20 +42,20 @@ If your tests don't exercise authorization, you miss an entire class of producti
 
 ## What You Get
 
-### ✅ One policy file (offline, deterministic)
+### One policy file (offline, deterministic)
 Define your authorization universe once in `policy.yaml`.
 
-### ✅ One identity channel end-to-end
+### One identity channel end-to-end
 Inject a principal consistently:
 - gRPC: `x-emulator-principal`
 - HTTP: `X-Emulator-Principal`
 
 That identity is propagated from emulator → IAM emulator without rewriting your app code.
 
-### ✅ Cross-service authorization
+### Cross-service authorization
 Secret Manager and KMS enforce the same policy engine, the same way.
 
-### ✅ CI-friendly and hermetic
+### CI-friendly and hermetic
 No network calls, no cloud credentials required.
 
 ---
