@@ -19,13 +19,11 @@ services:
 
   # Secret Manager Emulator - Data Plane
   secret-manager:
-    image: ghcr.io/blackwell-systems/gcp-secret-manager-emulator:latest
+    image: ghcr.io/blackwell-systems/gcp-secret-manager-emulator-dual:latest
     ports:
       - "9090:9090"  # gRPC
       - "8081:8080"  # HTTP (avoid conflict with IAM)
     environment:
-      - GCP_SECRET_MANAGER_GRPC_PORT=9090
-      - GCP_SECRET_MANAGER_HTTP_PORT=8080
       - IAM_MODE=permissive
       - IAM_HOST=iam:8080
     depends_on:
@@ -34,13 +32,11 @@ services:
 
   # KMS Emulator - Data Plane
   kms:
-    image: ghcr.io/blackwell-systems/gcp-kms-emulator:latest
+    image: ghcr.io/blackwell-systems/gcp-kms-emulator-dual:latest
     ports:
       - "9091:9090"  # gRPC
       - "8082:8080"  # HTTP
     environment:
-      - GCP_KMS_GRPC_PORT=9090
-      - GCP_KMS_HTTP_PORT=8080
       - IAM_MODE=permissive
       - IAM_HOST=iam:8080
     depends_on:
