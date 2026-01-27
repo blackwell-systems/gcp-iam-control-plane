@@ -6,18 +6,16 @@ services:
     image: ghcr.io/blackwell-systems/gcp-iam-emulator:latest
     ports:
       - "8080:8080"
-      - "9080:9080"  # Health check port (requires IAM v0.6.0+)
+      - "9080:9080"  # Health check port
     volumes:
       - ./policy.yaml:/policy.yaml:ro
     command: ["./server", "--config", "/policy.yaml"]
-    # Note: Health check temporarily disabled until IAM v0.6.0+ is published
-    # Uncomment after updating to IAM v0.6.0+:
-    # healthcheck:
-    #   test: ["CMD-SHELL", "wget --spider -q http://localhost:9080/health || exit 1"]
-    #   interval: 5s
-    #   timeout: 3s
-    #   retries: 10
-    #   start_period: 5s
+    healthcheck:
+      test: ["CMD-SHELL", "wget --spider -q http://localhost:9080/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   # Secret Manager Emulator - Data Plane
   secret-manager:
@@ -31,8 +29,8 @@ services:
       - IAM_MODE=permissive
       - IAM_HOST=iam:8080
     depends_on:
-      - iam
-      # condition: service_healthy - Restore after IAM v0.6.0+
+      iam:
+        condition: service_healthy
 
   # KMS Emulator - Data Plane
   kms:
@@ -46,5 +44,5 @@ services:
       - IAM_MODE=permissive
       - IAM_HOST=iam:8080
     depends_on:
-      - iam
-      # condition: service_healthy - Restore after IAM v0.6.0+
+      iam:
+        condition: service_healthy
