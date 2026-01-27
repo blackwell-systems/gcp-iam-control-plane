@@ -16,8 +16,8 @@
 
 It composes:
 - **gcp-iam-emulator** (authorization engine)
-- **gcp-secret-manager-emulator v1.2.0+** (data plane with IAM integration)
-- **gcp-kms-emulator v0.2.0+** (data plane with IAM integration)
+- **gcp-secret-manager-emulator v1.2.1+** (data plane with IAM integration)
+- **gcp-kms-emulator v0.2.1+** (data plane with IAM integration)
 - (future) additional emulators that follow the same contract
 
 This repo provides the **control plane glue**:
