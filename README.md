@@ -14,11 +14,25 @@
 
 **GCP Emulator Control Plane** is the orchestration repo for the Blackwell Systems local GCP emulator ecosystem.
 
-It composes:
-- **gcp-iam-emulator** (authorization engine)
-- **gcp-secret-manager-emulator v1.2.1+** (data plane with IAM integration)
-- **gcp-kms-emulator v0.2.1+** (data plane with IAM integration)
-- (future) additional emulators that follow the same contract
+## Ecosystem Components
+
+This control plane orchestrates the complete Blackwell Systems GCP emulator ecosystem:
+
+| Component | Role | Repository | Status |
+|-----------|------|------------|--------|
+| [gcp-iam-emulator](https://github.com/blackwell-systems/gcp-iam-emulator) | Authorization engine (control plane) | [`blackwell-systems/gcp-iam-emulator`](https://github.com/blackwell-systems/gcp-iam-emulator) | ✓ Stable |
+| [gcp-secret-manager-emulator](https://github.com/blackwell-systems/gcp-secret-manager-emulator) | Secret Manager API (data plane) | [`blackwell-systems/gcp-secret-manager-emulator`](https://github.com/blackwell-systems/gcp-secret-manager-emulator) | ✓ Stable (v1.2.1+) |
+| [gcp-kms-emulator](https://github.com/blackwell-systems/gcp-kms-emulator) | KMS API (data plane) | [`blackwell-systems/gcp-kms-emulator`](https://github.com/blackwell-systems/gcp-kms-emulator) | ✓ Stable (v0.2.1+) |
+
+**All components can run standalone or orchestrated together.**
+
+Each emulator follows the [Integration Contract](docs/INTEGRATION_CONTRACT.md):
+- Resource naming conventions
+- Permission mappings
+- Principal propagation (gRPC + HTTP)
+- IAM mode configuration (off, permissive, strict)
+
+Future emulators (Cloud Storage, Pub/Sub, etc.) will follow the same contract
 
 This repo provides the **control plane glue**:
 - **`gcp-emulator` CLI** - Single command to manage the entire stack
