@@ -274,8 +274,13 @@ echo ""
 echo "2. Retrieving key reference from Secret Manager..."
 RESPONSE=$(curl -s "$SM_URL/v1/projects/$PROJECT/secrets/kms-key-ref/versions/latest:access" \
     -H "X-Emulator-Principal: $PRINCIPAL")
-RETRIEVED_KEY_REF=$(echo "$RESPONSE" | jq -r '.payload.data' | base64 -d)
-echo "  Retrieved: $RETRIEVED_KEY_REF"
+RETRIEVED_KEY_REF=$(echo "$RESPONSE" | jq -r '.payload.data // empty' | base64 -d 2>/dev/null || echo "Error decoding")
+if [ -n "$RETRIEVED_KEY_REF" ] && [ "$RETRIEVED_KEY_REF" != "Error decoding" ]; then
+    echo "  Retrieved: $RETRIEVED_KEY_REF"
+else
+    echo "  Error: Failed to retrieve key reference"
+    echo "  Response: $(echo "$RESPONSE" | jq -c .)"
+fi
 echo ""
 
 # Use retrieved key for encryption
