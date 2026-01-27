@@ -8,12 +8,13 @@ services:
       - "8080:8080"
     volumes:
       - ./policy.yaml:/policy.yaml:ro
-    command: ["./server", "--config", "/policy.yaml", "--trace"]
+    command: ["./server", "--config", "/policy.yaml"]
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/health"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
 
   # Secret Manager Emulator - Data Plane
   secret-manager:
