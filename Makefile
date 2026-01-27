@@ -1,4 +1,4 @@
-.PHONY: build install clean test
+.PHONY: build install clean test test-unit test-e2e test-e2e-bash test-e2e-go lint build-all dev
 
 # Binary name
 BINARY=gcp-emulator
@@ -15,10 +15,27 @@ install:
 # Clean build artifacts
 clean:
 	rm -f $(BINARY)
+	rm -f bin/gcp-emulator-e2e*
 
-# Run tests
-test:
-	go test ./...
+# Run all tests
+test: test-unit test-e2e
+
+# Run unit tests
+test-unit:
+	go test -v ./internal/...
+
+# Run e2e tests (all)
+test-e2e: test-e2e-bash test-e2e-go
+
+# Run bash integration tests
+test-e2e-bash:
+	@echo "Running bash integration tests..."
+	./test/e2e/integration.sh
+
+# Run Go e2e tests
+test-e2e-go:
+	@echo "Running Go e2e tests..."
+	go test -v -timeout 10m ./test/e2e/...
 
 # Run linter
 lint:

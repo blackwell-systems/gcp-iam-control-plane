@@ -1,0 +1,69 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e-bash:
+    name: E2E Tests (Bash)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y jq
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run integration tests
+      run: ./test/e2e/integration.sh
+      timeout-minutes: 10
+
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        echo "=== Docker Compose Logs ===" 
+        docker-compose logs || true
+
+  e2e-go:
+    name: E2E Tests (Go)
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Install GCP SDK dependencies
+      run: |
+        go get cloud.google.com/go/secretmanager/apiv1
+        go get cloud.google.com/go/kms/apiv1
+
+    - name: Run Go e2e tests
+      run: go test -v -timeout 10m ./test/e2e/...
+
+    - name: Show logs on failure
+      if: failure()
+      run: |
+        echo "=== Docker Compose Logs ==="
+        docker-compose logs || true
