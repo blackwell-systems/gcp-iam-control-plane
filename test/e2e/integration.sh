@@ -15,8 +15,10 @@ NC='\033[0m' # No Color
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 CLI_BINARY="$ROOT_DIR/bin/gcp-emulator-e2e-integration"
 IAM_PORT=8080
-SM_PORT=9090
-KMS_PORT=9091
+SM_GRPC_PORT=9090
+SM_HTTP_PORT=8081
+KMS_GRPC_PORT=9091
+KMS_HTTP_PORT=8082
 PROJECT="test-project"
 PRINCIPAL="user:alice@example.com"
 
@@ -89,7 +91,7 @@ log "===== Testing Secret Manager ====="
 
 # Create secret
 log "Creating secret..."
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_PORT/v1/projects/$PROJECT/secrets" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json" \
   -d '{
@@ -112,7 +114,7 @@ fi
 # Add secret version
 log "Adding secret version..."
 SECRET_DATA=$(echo -n "my-secret-password" | base64)
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_PORT/v1/projects/$PROJECT/secrets/test-secret:addVersion" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets/test-secret:addVersion" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json" \
   -d "{
@@ -130,7 +132,7 @@ fi
 
 # Access secret version
 log "Accessing secret version..."
-RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:$SM_PORT/v1/projects/$PROJECT/secrets/test-secret/versions/1:access" \
+RESPONSE=$(curl -s -w "\n%{http_code}" "http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets/test-secret/versions/1:access" \
   -H "X-Emulator-Principal: $PRINCIPAL")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
@@ -154,7 +156,7 @@ log "===== Testing KMS ====="
 
 # Create key ring
 log "Creating key ring..."
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$((KMS_PORT + 1))/v1/projects/$PROJECT/locations/global/keyRings?keyRingId=test-ring" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$KMS_HTTP_PORT/v1/projects/$PROJECT/locations/global/keyRings?keyRingId=test-ring" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json")
 
@@ -167,7 +169,7 @@ fi
 
 # Create crypto key
 log "Creating crypto key..."
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$((KMS_PORT + 1))/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys?cryptoKeyId=test-key" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$KMS_HTTP_PORT/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys?cryptoKeyId=test-key" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json" \
   -d '{
@@ -184,7 +186,7 @@ fi
 # Encrypt data
 log "Encrypting data with KMS..."
 PLAINTEXT=$(echo -n "sensitive-data" | base64)
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$((KMS_PORT + 1))/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys/test-key:encrypt" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$KMS_HTTP_PORT/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys/test-key:encrypt" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json" \
   -d "{
@@ -200,7 +202,7 @@ if [ "$HTTP_CODE" = "200" ]; then
     
     # Decrypt data
     log "Decrypting data with KMS..."
-    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$((KMS_PORT + 1))/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys/test-key:decrypt" \
+    RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$KMS_HTTP_PORT/v1/projects/$PROJECT/locations/global/keyRings/test-ring/cryptoKeys/test-key:decrypt" \
       -H "X-Emulator-Principal: $PRINCIPAL" \
       -H "Content-Type: application/json" \
       -d "{
@@ -231,7 +233,7 @@ log "===== Testing IAM Enforcement ====="
 # Test with unauthorized principal
 log "Testing with unauthorized principal..."
 UNAUTHORIZED="user:unauthorized@example.com"
-RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_PORT/v1/projects/$PROJECT/secrets" \
+RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets" \
   -H "X-Emulator-Principal: $UNAUTHORIZED" \
   -H "Content-Type: application/json" \
   -d '{
