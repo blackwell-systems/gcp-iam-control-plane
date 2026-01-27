@@ -17,6 +17,13 @@ Unified command-line interface for managing the GCP Emulator Control Plane.
 - Shell completion
 - Persistent flags
 
+**Configuration:** Viper (github.com/spf13/viper)
+- Automatic precedence: flags > env vars > config file > defaults
+- Multiple config file formats (YAML, JSON, TOML)
+- Environment variable binding
+- Live config watching (optional)
+- Works seamlessly with Cobra
+
 **Output styling:** fatih/color
 - Cross-platform colored output
 - Auto-detects TTY
@@ -784,11 +791,152 @@ trace: false
 policy-file: ./policy.yaml
 ```
 
-**Precedence:**
-1. Command-line flags
-2. Environment variables
-3. Config file
-4. Defaults
+**Viper Configuration Management:**
+
+Viper handles configuration precedence automatically:
+
+1. **Command-line flags** (highest priority)
+   ```bash
+   gcp-emulator start --mode=strict
+   ```
+
+2. **Environment variables**
+   ```bash
+   export GCP_EMULATOR_IAM_MODE=strict
+   export GCP_EMULATOR_TRACE=true
+   gcp-emulator start
+   ```
+
+3. **Config file** (`~/.gcp-emulator/config.yaml`)
+   ```yaml
+   iam-mode: permissive
+   trace: false
+   ```
+
+4. **Defaults** (lowest priority)
+   ```go
+   viper.SetDefault("iam-mode", "permissive")
+   viper.SetDefault("trace", false)
+   ```
+
+**Implementation:**
+```go
+// internal/config/config.go
+package config
+
+import (
+    "github.com/spf13/viper"
+)
+
+func Init() error {
+    // Set config file name and type
+    viper.SetConfigName("config")
+    viper.SetConfigType("yaml")
+    
+    // Add config file search paths
+    viper.AddConfigPath("$HOME/.gcp-emulator")
+    viper.AddConfigPath(".")
+    
+    // Set defaults
+    viper.SetDefault("iam-mode", "permissive")
+    viper.SetDefault("pull-on-start", false)
+    viper.SetDefault("trace", false)
+    viper.SetDefault("policy-file", "./policy.yaml")
+    
+    // Bind environment variables with prefix
+    viper.SetEnvPrefix("GCP_EMULATOR")
+    viper.AutomaticEnv()
+    
+    // Read config file (ignore if not found)
+    if err := viper.ReadInConfig(); err != nil {
+        if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
+            return err
+        }
+    }
+    
+    return nil
+}
+
+// Get retrieves a config value
+func Get(key string) string {
+    return viper.GetString(key)
+}
+
+// GetBool retrieves a boolean config value
+func GetBool(key string) bool {
+    return viper.GetBool(key)
+}
+
+// Set updates a config value
+func Set(key string, value interface{}) error {
+    viper.Set(key, value)
+    return viper.WriteConfig()
+}
+```
+
+**Cobra + Viper Integration:**
+```go
+// cmd/gcp-emulator/start.go
+package main
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/spf13/viper"
+)
+
+var startCmd = &cobra.Command{
+    Use:   "start",
+    Short: "Start the emulator stack",
+    Run: func(cmd *cobra.Command, args []string) {
+        // Viper automatically resolves from flags, env, config, defaults
+        mode := viper.GetString("iam-mode")
+        trace := viper.GetBool("trace")
+        pullOnStart := viper.GetBool("pull-on-start")
+        
+        // Use values...
+    },
+}
+
+func init() {
+    // Define flags
+    startCmd.Flags().String("mode", "", "IAM mode (off|permissive|strict)")
+    startCmd.Flags().Bool("pull", false, "Pull images before starting")
+    startCmd.Flags().BoolP("detach", "d", true, "Run in background")
+    
+    // Bind flags to viper keys
+    viper.BindPFlag("iam-mode", startCmd.Flags().Lookup("mode"))
+    viper.BindPFlag("pull-on-start", startCmd.Flags().Lookup("pull"))
+    viper.BindPFlag("detach", startCmd.Flags().Lookup("detach"))
+}
+```
+
+**Environment Variable Naming:**
+
+Viper automatically converts config keys to environment variables:
+- Config key: `iam-mode` → Environment: `GCP_EMULATOR_IAM_MODE`
+- Config key: `pull-on-start` → Environment: `GCP_EMULATOR_PULL_ON_START`
+- Config key: `trace` → Environment: `GCP_EMULATOR_TRACE`
+
+**Example: All three precedence levels:**
+```bash
+# Config file has: iam-mode: permissive
+# Environment has: GCP_EMULATOR_IAM_MODE=strict
+# Flag provided: --mode=off
+
+# Result: flag wins (off)
+gcp-emulator start --mode=off
+
+# Without flag, env var wins
+gcp-emulator start  # Uses strict from environment
+
+# Without flag or env, config file wins
+unset GCP_EMULATOR_IAM_MODE
+gcp-emulator start  # Uses permissive from config file
+
+# Without any, default wins
+rm ~/.gcp-emulator/config.yaml
+gcp-emulator start  # Uses permissive from defaults
+```
 
 ---
 
@@ -798,11 +946,19 @@ policy-file: ./policy.yaml
 ```go
 require (
     github.com/spf13/cobra v1.8.0       // CLI framework
+    github.com/spf13/viper v1.18.2      // Configuration management
     github.com/fatih/color v1.16.0      // Colored output
     gopkg.in/yaml.v3 v3.0.1             // YAML parsing
     github.com/google/cel-go v0.18.2    // CEL validation (optional)
 )
 ```
+
+**Why this stack:**
+- **Cobra**: Industry standard CLI framework (kubectl, docker, gh use it)
+- **Viper**: Perfect companion to Cobra, handles all config sources seamlessly
+- **fatih/color**: Simple, cross-platform colored output
+- **yaml.v3**: Direct policy file manipulation
+- **cel-go**: Optional, for validating CEL conditions in policy
 
 ---
 
