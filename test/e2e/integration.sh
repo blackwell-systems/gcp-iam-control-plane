@@ -91,6 +91,18 @@ log "===== Testing Secret Manager ====="
 
 # Create secret
 log "Creating secret..."
+log "Target: http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets"
+
+# First check if port is reachable
+if ! curl -s --max-time 2 http://localhost:$SM_HTTP_PORT/health > /dev/null 2>&1; then
+    error "Secret Manager not reachable on port $SM_HTTP_PORT"
+    log "Checking container status..."
+    docker compose ps
+    log "Showing Secret Manager logs..."
+    docker compose logs secret-manager | tail -30
+    exit 1
+fi
+
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://localhost:$SM_HTTP_PORT/v1/projects/$PROJECT/secrets" \
   -H "X-Emulator-Principal: $PRINCIPAL" \
   -H "Content-Type: application/json" \
@@ -110,9 +122,6 @@ else
     error "Failed to create secret (HTTP $HTTP_CODE)"
     echo "Response body:"
     echo "$BODY"
-    echo ""
-    log "Checking if services are actually running..."
-    docker compose ps
     exit 1
 fi
 
