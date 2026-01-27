@@ -32,8 +32,13 @@ var cliBinary string
 
 // TestMain builds the CLI and manages stack lifecycle
 func TestMain(m *testing.M) {
-	// Build CLI binary
-	rootDir := filepath.Join("..", "..")
+	// Get absolute path to root directory
+	rootDir, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to get root directory: %v\n", err)
+		os.Exit(1)
+	}
+	
 	cliBinary = filepath.Join(rootDir, "bin", "gcp-emulator-e2e")
 
 	fmt.Println("Building CLI binary...")
