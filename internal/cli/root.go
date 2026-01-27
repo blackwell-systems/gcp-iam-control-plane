@@ -24,6 +24,10 @@ func init() {
 	// Add subcommands
 	rootCmd.AddCommand(startCmd)
 	rootCmd.AddCommand(stopCmd)
+	rootCmd.AddCommand(restartCmd)
 	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(logsCmd)
+	rootCmd.AddCommand(policyCmd)
+	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(versionCmd)
 }
