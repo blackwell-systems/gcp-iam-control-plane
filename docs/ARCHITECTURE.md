@@ -6,16 +6,580 @@ This document describes the system design, component interactions, and technical
 
 ## Table of Contents
 
-1. [High-Level Architecture](#high-level-architecture)
-2. [Component Responsibilities](#component-responsibilities)
-3. [Request Flow](#request-flow)
-4. [Identity Propagation](#identity-propagation)
-5. [Authorization Model](#authorization-model)
-6. [Failure Modes](#failure-modes)
-7. [Network Topology](#network-topology)
-8. [Data Flow](#data-flow)
-9. [Design Decisions](#design-decisions)
-10. [Extension Points](#extension-points)
+1. [Repository Ecosystem](#repository-ecosystem)
+2. [Complete System Architecture](#complete-system-architecture)
+3. [High-Level Architecture](#high-level-architecture)
+4. [Component Responsibilities](#component-responsibilities)
+5. [CLI Architecture](#cli-architecture)
+6. [Request Flow](#request-flow)
+7. [Identity Propagation](#identity-propagation)
+8. [Authorization Model](#authorization-model)
+9. [Failure Modes](#failure-modes)
+10. [Network Topology](#network-topology)
+11. [Data Flow](#data-flow)
+12. [Design Decisions](#design-decisions)
+13. [Extension Points](#extension-points)
+
+---
+
+## Repository Ecosystem
+
+The GCP Emulator Control Plane is composed of **5 repositories** working together:
+
+```
+┌────────────────────────────────────────────────────────────────────────────┐
+│                     Repository Ecosystem Overview                          │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │  1. gcp-emulator-control-plane (THIS REPO)                           │ │
+│  │     https://github.com/blackwell-systems/gcp-emulator-control-plane  │ │
+│  │                                                                       │ │
+│  │  Purpose: Orchestration layer for entire emulator ecosystem          │ │
+│  │  Language: Go                                                         │ │
+│  │  Provides:                                                            │ │
+│  │    - gcp-emulator CLI (Cobra + Viper + fatih/color)                  │ │
+│  │    - docker-compose.yml (service orchestration)                      │ │
+│  │    - policy.yaml (single source of truth for IAM)                    │ │
+│  │    - Policy packs (secretmanager.yaml, kms.yaml, ci.yaml)            │ │
+│  │    - Integration contract documentation                              │ │
+│  │    - End-to-end examples (Go SDK + curl)                             │ │
+│  │                                                                       │ │
+│  │  Key Components:                                                      │ │
+│  │    - cmd/gcp-emulator/main.go - CLI entry point                      │ │
+│  │    - internal/cli/ - Cobra command implementations                   │ │
+│  │    - internal/config/ - Viper configuration (disciplined pattern)    │ │
+│  │    - internal/docker/ - Docker compose wrapper                       │ │
+│  │    - internal/policy/ - Policy parser and validator                  │ │
+│  │    - examples/ - Reference implementations                           │ │
+│  └──────────────────────────────────────────────────────────────────────┘ │
+│                                    │                                      │
+│                                    │ orchestrates via docker-compose      │
+│                                    ▼                                      │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │  2. gcp-iam-emulator (CONTROL PLANE)                                 │ │
+│  │     https://github.com/blackwell-systems/gcp-iam-emulator            │ │
+│  │                                                                       │ │
+│  │  Purpose: Authorization engine for all emulators                     │ │
+│  │  Language: Go                                                         │ │
+│  │  Provides:                                                            │ │
+│  │    - IAM Policy API (gRPC + REST)                                    │ │
+│  │    - TestIamPermissions, SetIamPolicy, GetIamPolicy                  │ │
+│  │    - Role expansion (custom roles + built-in roles)                  │ │
+│  │    - Group resolution (1 level of nesting)                           │ │
+│  │    - CEL condition evaluation (resource-based access control)        │ │
+│  │    - Policy schema v3 support                                        │ │
+│  │    - Hot reload (--watch flag)                                       │ │
+│  │    - Enhanced trace mode (JSON output, metrics)                      │ │
+│  │                                                                       │ │
+│  │  Key Components:                                                      │ │
+│  │    - cmd/server/main.go - IAM server binary                          │ │
+│  │    - internal/policy/ - Policy loading and parsing                   │ │
+│  │    - internal/engine/ - Permission evaluation logic                  │ │
+│  │    - internal/roles/ - Built-in role definitions                     │ │
+│  │    - internal/conditions/ - CEL expression evaluator                 │ │
+│  │                                                                       │ │
+│  │  Docker Image: ghcr.io/blackwell-systems/gcp-iam-emulator:latest    │ │
+│  │  Default Port: 8080 (gRPC)                                           │ │
+│  └──────────────────────────────────────────────────────────────────────┘ │
+│                                    ▲                                      │
+│                                    │ TestIamPermissions(principal,        │
+│                                    │   resource, permission)              │
+│                                    │                                      │
+│  ┌─────────────────────────────────┴──────────────────────────────────┐  │
+│  │  3. gcp-secret-manager-emulator (DATA PLANE)                        │  │
+│  │     https://github.com/blackwell-systems/gcp-secret-manager-emulator│  │
+│  │                                                                      │  │
+│  │  Purpose: Secret Manager CRUD operations with IAM enforcement       │  │
+│  │  Language: Go                                                        │  │
+│  │  Provides:                                                           │  │
+│  │    - Secret Manager API (gRPC + REST)                               │  │
+│  │    - CreateSecret, GetSecret, UpdateSecret, DeleteSecret            │  │
+│  │    - AddSecretVersion, AccessSecretVersion, ListSecretVersions      │  │
+│  │    - EnableSecretVersion, DisableSecretVersion, DestroyVersion      │  │
+│  │    - In-memory storage (hermetic, no persistence)                   │  │
+│  │    - IAM mode support (off/permissive/strict)                       │  │
+│  │    - 90.8% test coverage                                            │  │
+│  │                                                                      │  │
+│  │  Key Components:                                                     │  │
+│  │    - cmd/server/main.go - gRPC-only server                          │  │
+│  │    - cmd/server-rest/main.go - REST-only server                     │  │
+│  │    - cmd/server-dual/main.go - Dual protocol server                 │  │
+│  │    - internal/server/ - gRPC service implementation                 │  │
+│  │    - internal/storage/ - In-memory secret storage                   │  │
+│  │    - Uses: gcp-emulator-auth (principal extraction, IAM client)     │  │
+│  │                                                                      │  │
+│  │  Docker Image: ghcr.io/blackwell-systems/gcp-secret-manager-emulator│  │
+│  │  Default Ports: 9090 (gRPC), 8081 (HTTP)                            │  │
+│  │  API Coverage: 11 of 12 methods (92%)                               │  │
+│  └──────────────────────────────────────────────────────────────────────┘  │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │  4. gcp-kms-emulator (DATA PLANE)                                    │ │
+│  │     https://github.com/blackwell-systems/gcp-kms-emulator            │ │
+│  │                                                                       │ │
+│  │  Purpose: KMS cryptographic operations with IAM enforcement          │ │
+│  │  Language: Go                                                         │ │
+│  │  Provides:                                                            │ │
+│  │    - KMS API (gRPC + REST)                                           │ │
+│  │    - CreateKeyRing, GetKeyRing, ListKeyRings                         │ │
+│  │    - CreateCryptoKey, GetCryptoKey, ListCryptoKeys, UpdateCryptoKey  │ │
+│  │    - CreateCryptoKeyVersion, UpdateCryptoKeyPrimaryVersion           │ │
+│  │    - Encrypt, Decrypt (AES-256-GCM)                                  │ │
+│  │    - Key version lifecycle (enable, disable, destroy)                │ │
+│  │    - In-memory storage (hermetic, no persistence)                    │ │
+│  │    - IAM mode support (off/permissive/strict)                        │ │
+│  │                                                                       │ │
+│  │  Key Components:                                                      │ │
+│  │    - cmd/server/main.go - gRPC-only server                           │ │
+│  │    - cmd/server-rest/main.go - REST-only server                      │ │
+│  │    - cmd/server-dual/main.go - Dual protocol server                  │ │
+│  │    - internal/server/ - gRPC service implementation                  │ │
+│  │    - internal/storage/ - In-memory key/keyring storage               │ │
+│  │    - internal/crypto/ - AES-256-GCM encryption                       │ │
+│  │    - Uses: gcp-emulator-auth (principal extraction, IAM client)      │ │
+│  │                                                                       │ │
+│  │  Docker Image: ghcr.io/blackwell-systems/gcp-kms-emulator:latest    │ │
+│  │  Default Ports: 9091 (gRPC), 8082 (HTTP)                             │ │
+│  │  API Coverage: 14 of ~26 methods (54% - complete key mgmt)          │ │
+│  └──────────────────────────────────────────────────────────────────────┘ │
+│                                                                            │
+│  ┌──────────────────────────────────────────────────────────────────────┐ │
+│  │  5. gcp-emulator-auth (SHARED LIBRARY)                               │ │
+│  │     https://github.com/blackwell-systems/gcp-emulator-auth           │ │
+│  │                                                                       │ │
+│  │  Purpose: Shared auth/authz logic for all data plane emulators       │ │
+│  │  Language: Go                                                         │ │
+│  │  Provides:                                                            │ │
+│  │    - Principal extraction (gRPC metadata + HTTP headers)             │ │
+│  │    - Environment config parsing (IAM_MODE, IAM_HOST)                 │ │
+│  │    - IAM client wrapper with timeout and mode handling               │ │
+│  │    - Error classification (connectivity vs config errors)            │ │
+│  │    - Consistent behavior across all emulators                        │ │
+│  │                                                                       │ │
+│  │  Key Functions:                                                       │ │
+│  │    - ExtractPrincipalFromContext(ctx) string                         │ │
+│  │    - ExtractPrincipalFromRequest(r *http.Request) string             │ │
+│  │    - LoadFromEnv() *Config                                           │ │
+│  │    - NewClient(host string, mode Mode) (*Client, error)              │ │
+│  │    - CheckPermission(ctx, principal, resource, perm) (bool, error)   │ │
+│  │                                                                       │ │
+│  │  Imported by: gcp-secret-manager-emulator, gcp-kms-emulator          │ │
+│  │  Why: Prevents code drift, ensures consistent IAM integration        │ │
+│  └──────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────┘
+```
+
+### Repository Dependency Graph
+
+```
+gcp-emulator-control-plane (orchestration)
+    │
+    ├─ docker-compose.yml orchestrates ──────┐
+    │                                         │
+    ▼                                         ▼
+gcp-iam-emulator                    gcp-secret-manager-emulator
+(control plane)                     (data plane)
+    ▲                                         │
+    │                                         │ import
+    │                                         ▼
+    │                               gcp-emulator-auth
+    │                               (shared library)
+    │                                         ▲
+    │                                         │ import
+    │                                         │
+    └─────────────────────────────────────────┤
+                                              │
+                                    gcp-kms-emulator
+                                    (data plane)
+```
+
+### Repository Relationships
+
+**Control Plane (orchestration repo):**
+- `gcp-emulator-control-plane` - CLI, docker-compose, policy.yaml, documentation
+
+**Control Plane (authorization engine):**
+- `gcp-iam-emulator` - Standalone authorization service, no dependencies on data plane
+
+**Data Plane (service emulators):**
+- `gcp-secret-manager-emulator` - Imports `gcp-emulator-auth`, calls `gcp-iam-emulator` gRPC
+- `gcp-kms-emulator` - Imports `gcp-emulator-auth`, calls `gcp-iam-emulator` gRPC
+
+**Shared Library:**
+- `gcp-emulator-auth` - Imported by all data plane emulators, no dependencies on other repos
+
+### Key Design Principles
+
+**Separation of Concerns:**
+- Control plane repo (this repo) = orchestration, CLI, documentation
+- IAM repo = authorization logic only
+- Data plane repos = CRUD operations + IAM integration
+- Shared library = common auth code (DRY principle)
+
+**No Circular Dependencies:**
+- IAM emulator is standalone (no knowledge of data plane)
+- Data plane emulators depend on shared library only
+- Shared library has no dependencies on other emulators
+- Control plane repo orchestrates via docker-compose (runtime, not compile-time)
+
+**Versioning Strategy:**
+- Each repo has independent versioning
+- Control plane `docker-compose.yml` pins specific versions
+- Shared library uses semantic versioning
+- Breaking changes require coordination across repos
+
+### Docker Image Publishing
+
+All repos publish Docker images to GitHub Container Registry (GHCR):
+
+```
+ghcr.io/blackwell-systems/gcp-iam-emulator:latest
+ghcr.io/blackwell-systems/gcp-iam-emulator:v1.0.0
+
+ghcr.io/blackwell-systems/gcp-secret-manager-emulator:latest
+ghcr.io/blackwell-systems/gcp-secret-manager-emulator:v1.2.0
+
+ghcr.io/blackwell-systems/gcp-kms-emulator:latest
+ghcr.io/blackwell-systems/gcp-kms-emulator:v0.2.0
+```
+
+**Publishing flow:**
+1. GitHub Actions on each repo builds multi-arch images (linux/amd64, linux/arm64)
+2. Images pushed to GHCR on tag push
+3. Control plane `docker-compose.yml` references these published images
+4. Users run `gcp-emulator start` → CLI pulls images → stack runs
+
+---
+
+## Complete System Architecture
+
+The GCP Emulator Control Plane consists of multiple layers working together:
+
+```
+┌────────────────────────────────────────────────────────────────┐
+│                        User Layer                              │
+│  ┌──────────────────┐        ┌─────────────────────────────┐   │
+│  │  gcp-emulator    │        │  Client Applications        │   │
+│  │  CLI Tool        │        │  (Go SDK, curl, scripts)    │   │
+│  │                  │        │                             │   │
+│  │  - Cobra         │        └─────────────┬───────────────┘   │
+│  │  - Viper         │                      │                   │
+│  │  - fatih/color   │                      │                   │
+│  └────────┬─────────┘                      │                   │
+│           │                                │                   │
+└───────────┼────────────────────────────────┼───────────────────┘
+            │ docker-compose                 │ gRPC/HTTP
+            │ commands                       │ with X-Emulator-Principal
+            ↓                                ↓
+┌────────────────────────────────────────────────────────────────┐
+│                    Orchestration Layer                         │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │         Docker Compose (docker-compose.yml)              │  │
+│  │  - Service definitions                                   │  │
+│  │  - Health checks                                         │  │
+│  │  - Network configuration                                 │  │
+│  │  - Environment variable injection                        │  │
+│  └──────────────────────────────────────────────────────────┘  │
+└────────────────────────────────────────────────────────────────┘
+            │
+            │ Container orchestration
+            ↓
+┌────────────────────────────────────────────────────────────────┐
+│                    Container Layer                             │
+│  ┌─────────────┐    ┌──────────────────┐    ┌─────────────┐   │
+│  │ IAM         │    │ Secret Manager   │    │ KMS         │   │
+│  │ Container   │    │ Container        │    │ Container   │   │
+│  │             │    │                  │    │             │   │
+│  │ Port: 8080  │    │ gRPC: 9090       │    │ gRPC: 9091  │   │
+│  │             │    │ HTTP: 8081       │    │ HTTP: 8082  │   │
+│  └─────────────┘    └──────────────────┘    └─────────────┘   │
+└────────────────────────────────────────────────────────────────┘
+            │
+            │ gRPC calls
+            ↓
+┌────────────────────────────────────────────────────────────────┐
+│                    Service Layer                               │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │            IAM Emulator (Control Plane)                  │  │
+│  │  - Policy evaluation from policy.yaml                    │  │
+│  │  - Role expansion                                        │  │
+│  │  - Group resolution                                      │  │
+│  │  - CEL condition evaluation                              │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│         ▲                                                      │
+│         │ TestIamPermissions(principal, resource, permission) │
+│         │                                                      │
+│  ┌──────┴────────────────┐       ┌──────────────────────────┐ │
+│  │ Secret Manager        │       │ KMS Emulator             │ │
+│  │ Emulator              │       │                          │ │
+│  │ - CRUD operations     │       │ - Key management         │ │
+│  │ - Permission checks   │       │ - Encrypt/Decrypt        │ │
+│  │ - Storage (in-memory) │       │ - Permission checks      │ │
+│  │ - gcp-emulator-auth   │       │ - gcp-emulator-auth      │ │
+│  └───────────────────────┘       └──────────────────────────┘ │
+└────────────────────────────────────────────────────────────────┘
+```
+
+### Layer Responsibilities
+
+**User Layer:**
+- CLI tool for managing stack (`gcp-emulator`)
+- Client applications using emulators
+- Principal injection via headers/metadata
+
+**Orchestration Layer:**
+- Docker Compose defines service topology
+- Health checks ensure proper startup order
+- Network configuration for service discovery
+- Environment variable propagation
+
+**Container Layer:**
+- Pre-built Docker images from GHCR
+- Port mapping to host
+- Volume mounts for policy.yaml
+- Independent lifecycle management
+
+**Service Layer:**
+- Control plane: IAM policy evaluation
+- Data plane: CRUD operations with permission checks
+- Shared library: gcp-emulator-auth prevents code drift
+
+---
+
+## CLI Architecture
+
+The `gcp-emulator` CLI provides a unified interface for managing the entire stack without requiring docker-compose knowledge.
+
+### CLI Component Structure
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│                     CLI Architecture                         │
+│                                                              │
+│  ┌────────────────────────────────────────────────────────┐ │
+│  │           cmd/gcp-emulator/main.go                     │ │
+│  │  - Entry point                                         │ │
+│  │  - Version injection                                   │ │
+│  │  - Config initialization                               │ │
+│  └─────────────────────┬────────────────────────────────── │
+│                        │                                    │
+│  ┌─────────────────────▼──────────────────────────────────┐ │
+│  │         internal/cli/ (Cobra Commands)                │ │
+│  │                                                        │ │
+│  │  ┌──────────────┐  ┌────────────┐  ┌──────────────┐  │ │
+│  │  │ root.go      │  │ start.go   │  │ status.go    │  │ │
+│  │  │ - Help       │  │ - Start    │  │ - Health     │  │ │
+│  │  │ - Version    │  │ - Pull     │  │ - Display    │  │ │
+│  │  └──────────────┘  └────────────┘  └──────────────┘  │ │
+│  │                                                        │ │
+│  │  ┌──────────────┐  ┌────────────┐  ┌──────────────┐  │ │
+│  │  │ policy.go    │  │ config.go  │  │ logs.go      │  │ │
+│  │  │ - Validate   │  │ - Get      │  │ - Follow     │  │ │
+│  │  │ - Init       │  │ - Set      │  │ - Filter     │  │ │
+│  │  └──────────────┘  └────────────┘  └──────────────┘  │ │
+│  └────────────────────┬───────────────────────────────── │
+│                       │                                   │
+│  ┌────────────────────▼──────────────────────────────────┐ │
+│  │      internal/config/ (Viper Integration)            │ │
+│  │                                                       │ │
+│  │  ┌─────────────────────────────────────────────────┐ │ │
+│  │  │ Config struct (explicit configuration)          │ │ │
+│  │  │ - IAMMode     string                             │ │ │
+│  │  │ - Trace       bool                               │ │ │
+│  │  │ - PolicyFile  string                             │ │ │
+│  │  │ - Ports       PortConfig                         │ │ │
+│  │  └─────────────────────────────────────────────────┘ │ │
+│  │                                                       │ │
+│  │  ┌─────────────────────────────────────────────────┐ │ │
+│  │  │ Configuration Precedence (Viper)                │ │ │
+│  │  │ 1. Command-line flags                           │ │ │
+│  │  │ 2. Environment variables (GCP_EMULATOR_*)       │ │ │
+│  │  │ 3. Config file (~/.gcp-emulator/config.yaml)    │ │ │
+│  │  │ 4. Defaults                                     │ │ │
+│  │  └─────────────────────────────────────────────────┘ │ │
+│  └───────────────────┬───────────────────────────────── │
+│                      │                                   │
+│  ┌───────────────────▼──────────────────────────────────┐ │
+│  │    internal/docker/ (Docker Compose Wrapper)        │ │
+│  │  - Start(cfg)                                       │ │
+│  │  - Stop()                                           │ │
+│  │  - Status() → ServiceStatus                         │ │
+│  │  - Pull()                                           │ │
+│  │  - Logs()                                           │ │
+│  └─────────────────────────────────────────────────────┘ │
+│                      │                                   │
+│  ┌───────────────────▼──────────────────────────────────┐ │
+│  │    internal/policy/ (Policy Parser & Validator)     │ │
+│  │  - Parse(file) → Policy                             │ │
+│  │  - Validate(policy) → ValidationResult              │ │
+│  │  - Init(template) → Policy                          │ │
+│  └─────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────┘
+           │                                │
+           │ docker-compose commands        │ policy.yaml
+           ▼                                ▼
+    Docker Engine                    Filesystem
+```
+
+### Design Principles
+
+**1. Disciplined Viper Pattern**
+
+The CLI follows the "disciplined Viper" pattern from CLI_VIPER_PATTERN.md:
+
+```
+Viper = configuration resolution engine (stays in internal/config/)
+Config struct = explicit configuration (passed to business logic)
+Business logic = no viper imports (clean, testable)
+```
+
+**Example flow:**
+```go
+// internal/config/config.go
+type Config struct {
+    IAMMode string
+    Ports   PortConfig
+}
+
+func Load() (*Config, error) {
+    cfg := &Config{
+        IAMMode: viper.GetString("iam-mode"),
+        Ports: PortConfig{
+            IAM: viper.GetInt("port-iam"),
+        },
+    }
+    return cfg, cfg.Validate()
+}
+
+// internal/cli/start.go
+func RunE(cmd *cobra.Command, args []string) error {
+    cfg, _ := config.Load()  // Explicit config
+    return docker.Start(cfg)  // Pass explicit config
+}
+
+// internal/docker/compose.go
+func Start(cfg *config.Config) error {
+    // No viper imports! Uses explicit config
+    env := []string{
+        fmt.Sprintf("IAM_MODE=%s", cfg.IAMMode),
+    }
+    // ...
+}
+```
+
+**2. Colored Output for UX**
+
+Using `fatih/color` for terminal output:
+
+```
+✓ (green)  - Success
+✗ (red)    - Error
+⚠ (yellow) - Warning
+→ (cyan)   - Info/Progress
+```
+
+**3. Configuration Precedence**
+
+Users can configure the CLI in multiple ways (highest precedence first):
+
+1. **Command-line flags:**
+   ```bash
+   gcp-emulator start --mode=strict --pull
+   ```
+
+2. **Environment variables:**
+   ```bash
+   export GCP_EMULATOR_IAM_MODE=permissive
+   export GCP_EMULATOR_PORT_IAM=8080
+   ```
+
+3. **Config file (`~/.gcp-emulator/config.yaml`):**
+   ```yaml
+   iam-mode: permissive
+   port-iam: 8080
+   policy-file: ./policy.yaml
+   ```
+
+4. **Defaults:**
+   ```go
+   viper.SetDefault("iam-mode", "off")
+   viper.SetDefault("port-iam", 8080)
+   ```
+
+### Command Flow Examples
+
+**Starting the stack:**
+
+```
+User: gcp-emulator start --mode=permissive
+
+1. Cobra parses flags
+   ├─ mode flag → "permissive"
+   
+2. Viper resolves configuration
+   ├─ Bind flag to viper key "iam-mode"
+   ├─ Check precedence: flag > env > config > default
+   └─ Result: iam-mode = "permissive"
+
+3. Config.Load() creates explicit struct
+   ├─ cfg := &Config{IAMMode: "permissive", ...}
+   └─ cfg.Validate() checks constraints
+
+4. docker.Start(cfg) executes
+   ├─ Build env vars from cfg (no viper!)
+   ├─ exec.Command("docker-compose", "up", "-d")
+   └─ Return success/error
+
+5. CLI prints colored output
+   ├─ color.Cyan("→ Starting stack...")
+   └─ color.Green("✓ Stack started successfully")
+```
+
+**Validating policy:**
+
+```
+User: gcp-emulator policy validate
+
+1. Cobra routes to policy.validateCmd
+
+2. policy.Parse(file) reads YAML
+   ├─ yaml.Unmarshal into Policy struct
+   └─ Return parsed policy
+
+3. policy.Validate(policy) checks constraints
+   ├─ Check role names start with "roles/"
+   ├─ Check permission format (service.resource.verb)
+   ├─ Check custom roles are defined
+   ├─ Check bindings reference valid roles
+   └─ Return ValidationResult{Valid, Errors}
+
+4. CLI displays results
+   ├─ If valid: color.Green("✓ Policy is valid")
+   └─ If errors: color.Red("✗ Validation failed") + list errors
+```
+
+### Why This Architecture?
+
+**Testability:**
+- Explicit Config struct → easy to test with mock configs
+- No global Viper state in business logic → isolated tests
+- Docker wrapper → can mock exec.Command
+
+**Maintainability:**
+- Clear separation: CLI (Cobra) → Config (Viper) → Business logic
+- Single source of truth for configuration precedence
+- Easy to add new commands (just add to internal/cli/)
+
+**User Experience:**
+- Colored output improves readability
+- Consistent flag naming across commands
+- Configuration flexibility (flags/env/file/defaults)
+- Single binary, no docker-compose knowledge required
+
+**Production-Grade:**
+- Same stack as kubectl, docker CLI, helm (Cobra + Viper)
+- Well-tested libraries with large communities
+- Cross-platform support (Windows/Linux/macOS)
 
 ---
 
