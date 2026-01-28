@@ -29,12 +29,12 @@ This definition prevents bad-faith arguments about "implied features" while prot
 The following capabilities are **permanently open source** under Apache 2.0:
 
 ### Core Infrastructure
-✅ **IAM policy engine** - Complete policy evaluation logic  
-✅ **Enforcement proxy** (gcp-emulator-auth) - Pre-flight authorization  
-✅ **All enforcement modes** - Off, Permissive (fail-open), Strict (fail-closed)  
-✅ **Service emulators** - Secret Manager, KMS, and all future data plane emulators  
-✅ **CLI orchestration** - Start, stop, status, logs commands  
-✅ **Raw observability** - Logs, traces, error messages, failure reasons  
+**IAM policy engine** - Complete policy evaluation logic  
+**Enforcement proxy** (gcp-emulator-auth) - Pre-flight authorization  
+**All enforcement modes** - Off, Permissive (fail-open), Strict (fail-closed)  
+**Service emulators** - Secret Manager, KMS, and all future data plane emulators  
+**CLI orchestration** - Start, stop, status, logs commands  
+**Raw observability** - Logs, traces, error messages, failure reasons  
 
 ### Key Guarantees
 - **Full enforcement** - All IAM modes remain fully functional
@@ -224,12 +224,12 @@ Premium features are built **as a layer above** the OSS core, not as gates withi
 
 The following practices are explicitly forbidden:
 
-❌ **Gate existing enforcement modes** - Strict mode will never become paid-only  
-❌ **Add license checks to hot paths** - No runtime validation in enforcement logic  
-❌ **Cripple OSS capabilities** - No artificial limits on requests, users, or time  
-❌ **Relicense existing repos** - Apache 2.0 is permanent for current code  
-❌ **Create "community vs pro" forks** - One codebase for OSS, separate repos for premium  
-❌ **Take away features retroactively** - If it's free today, it's free forever  
+**Gate existing enforcement modes** - Strict mode will never become paid-only  
+**Add license checks to hot paths** - No runtime validation in enforcement logic  
+**Cripple OSS capabilities** - No artificial limits on requests, users, or time  
+**Relicense existing repos** - Apache 2.0 is permanent for current code  
+**Create "community vs pro" forks** - One codebase for OSS, separate repos for premium  
+**Take away features retroactively** - If it's free today, it's free forever  
 
 **Why these are forbidden:**
 
