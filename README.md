@@ -58,9 +58,8 @@ Unlike mocks (which allow everything) or observers like iamlive (which record af
 └─────────────────────────────────────────┘
 ```
 
-This CLI orchestrates both layers, ensuring consistent IAM enforcement across all services.
 
-See the [category definition](https://github.com/blackwell-systems/gcp-emulator-auth/blob/master/CATEGORY.md) for complete architectural context.
+This CLI orchestrates the IAM control plane and all data plane services.
 
 ---
 
