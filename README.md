@@ -15,12 +15,12 @@ Orchestrates the **Local IAM Control Plane** — a CLI (`gcp-emulator`) that man
 
 ## What This Is
 
-Unlike mocks (which allow everything) or observers like iamlive (which record after the fact), the **Blackwell IAM Control Plane** actively denies unauthorized requests before they reach emulators.
+Unlike mocks (which allow everything) or observers (which record after the fact), the **Blackwell IAM Control Plane** actively denies unauthorized requests before they reach emulators.
 
 | Approach | Example | When | Behavior |
 |----------|---------|------|----------|
 | Mock | Standard emulators | Never | Always allows |
-| Observer | iamlive (AWS) | After | Records what you used |
+| Observer | Post-execution analysis | After | Records what you used |
 | **Control Plane** | **Blackwell IAM** | **Before** | **Denies unauthorized** |
 
 Pre-flight enforcement catches permission bugs in development and CI, not production.
