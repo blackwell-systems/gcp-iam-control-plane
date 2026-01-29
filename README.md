@@ -487,6 +487,23 @@ Non-breaking by design.
 
 ---
 
+## Who's Using This?
+
+If you're using the GCP emulator control plane — in CI, locally, or in a test harness — I'd love to hear how you're using it.
+
+- **How do you orchestrate the emulators?** (via this CLI, docker-compose directly, custom scripts)
+- **What's your policy.yaml approach?** (single file for all services, multiple files, generated dynamically)
+- **Which emulators are you running?** (IAM + Secret Manager, IAM + KMS, full stack)
+- **What's still friction?** (multi-service coordination, log aggregation, IAM mode transitions)
+
+Open an issue, start a discussion, or reach out directly:
+
+📬 dayna@blackwell-systems.com
+
+This helps shape the roadmap and ensures the project stays aligned with real-world needs.
+
+---
+
 ## Disclaimer
 
 This project is not affiliated with, endorsed by, or sponsored by Google LLC. "Google Cloud", "GCP", "IAM", and related trademarks are property of Google LLC.
