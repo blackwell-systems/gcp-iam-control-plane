@@ -7,7 +7,7 @@
 [![Version](https://img.shields.io/github/v/release/blackwell-systems/gcp-iam-control-plane)](https://github.com/blackwell-systems/gcp-iam-control-plane/releases)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-> **Enforce real GCP IAM policies in local development and CI** — Make your emulators fail exactly like production would.
+> **Enforce IAM authorization policies in local development and CI** — Make your emulators fail for the same authorization reasons production would.
 
 Orchestrates the **Local IAM Control Plane** — a CLI (`gcp-emulator`) that manages GCP service emulators with pre-flight IAM enforcement. Start/stop services, manage policies, and test authorization without cloud credentials or docker-compose knowledge.
 
@@ -45,12 +45,12 @@ This control plane provides what was missing:
 - **Offline Authorization** - Services check permissions locally (no network required)
 - **Zero-Credential Loop** - Simulate identities in-memory (no service account keys)
 
-**The result:** Tests fail exactly like production, run completely offline, execute deterministically.
+**The result:** Tests fail for the same authorization reasons production would, run completely offline, and execute deterministically.
 
 **The Security Paradox:**
 > "A test that cannot fail due to a permission error is a test that has not fully validated the code's production readiness."
 
-This is not an incremental improvement. This is the **completion of a system that was deliberately left incomplete**.
+This is not an incremental improvement. This **fills the missing identity-layer gap in local hermetic emulator workflows**.
 
 ---
 
@@ -80,7 +80,7 @@ This is not an incremental improvement. This is the **completion of a system tha
 │                                         │
 │  - Role bindings                        │
 │  - Group memberships                    │
-│  - Policy inheritance                   │
+│  - Resource-level policy evaluation     │
 │  - Deterministic evaluation             │
 └─────────────────────────────────────────┘
 ```
@@ -105,7 +105,7 @@ Most GCP emulators skip authorization entirely. Without IAM testing, you discove
 ## What You Get
 
 - **Unified CLI** - Single command to start/stop/restart the entire stack, no docker-compose knowledge required
-- **Production policy testing** - Export real GCP policies and test locally (`gcloud get-iam-policy` → test)
+- **Policy import** - Load IAM policies from JSON/YAML (including exports from tooling like `gcloud get-iam-policy`)
 - **One policy file** - Define authorization once in `policy.yaml` or `policy.json`, enforced consistently across all emulators
 - **Principal injection** - Consistent identity channel (gRPC `x-emulator-principal`, HTTP `X-Emulator-Principal`)
 - **Hermetic testing** - No network calls, no cloud credentials, deterministic CI pipelines
@@ -183,13 +183,15 @@ Export your real GCP IAM policy and test against it:
 # Export production policy
 gcloud projects get-iam-policy my-prod-project --format=json > prod-policy.json
 
-# Test locally with production permissions
+# Test locally with the exported policy
 gcp-emulator start --policy-file=prod-policy.json --mode=strict
 go test ./...
 
 # Catch permission issues before deploying
 gcp-emulator logs iam | grep DENY
 ```
+
+**Note:** Exporting policies with `gcloud` requires GCP credentials. Running the emulators and tests does not.
 
 **Why this matters:**
 - Test with exact production policy
@@ -263,7 +265,7 @@ See [CLI Design](docs/CLI_DESIGN.md) for complete command reference.
 **IAM Modes:**
 - `off` - No IAM enforcement (fast iteration)
 - `permissive` - IAM enabled, fail-open on errors (development)
-- `strict` - IAM enabled, fail-closed (production parity, recommended for CI)
+- `strict` - IAM enabled, fail-closed (CI-ready, recommended for CI)
 
 See [CI Integration](docs/CI_INTEGRATION.md) for GitLab, CircleCI, Jenkins examples.
 
